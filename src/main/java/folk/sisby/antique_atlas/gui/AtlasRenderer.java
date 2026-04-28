@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -162,6 +163,10 @@ public interface AtlasRenderer {
 	}
 
 	default void renderMarker(PoseStack matrices, SubmitNodeCollector submitter, Landmark landmark, MarkerTexture texture, float z, int light, BiFunction<Double, Double, Float> alphaGetter, boolean pinned, boolean hovering, float markerScale) {
+		renderMarker(matrices, (OrderedSubmitNodeCollector) submitter, landmark, texture, z, light, alphaGetter, pinned, hovering, markerScale);
+	}
+
+	default void renderMarker(PoseStack matrices, OrderedSubmitNodeCollector submitter, Landmark landmark, MarkerTexture texture, float z, int light, BiFunction<Double, Double, Float> alphaGetter, boolean pinned, boolean hovering, float markerScale) {
 		BlockPos pos = landmark.get(LandmarkComponentTypes.POS);
 		Integer color = landmark.get(LandmarkComponentTypes.COLOR);
 		float[] accent = color == null ? null : ColorUtil.componentsFromRgb(color);
@@ -245,6 +250,10 @@ public interface AtlasRenderer {
 	}
 
 	default void renderPlayer(PoseStack matrices, SubmitNodeCollector submitter, float z, int light, PlayerSummary player, float iconScale, float alpha, boolean hovering, boolean self) {
+		renderPlayer(matrices, (OrderedSubmitNodeCollector) submitter, z, light, player, iconScale, alpha, hovering, self);
+	}
+
+	default void renderPlayer(PoseStack matrices, OrderedSubmitNodeCollector submitter, float z, int light, PlayerSummary player, float iconScale, float alpha, boolean hovering, boolean self) {
 		double dimX = player.pos().x();
 		double dimZ = player.pos().z();
 
@@ -309,6 +318,10 @@ public interface AtlasRenderer {
 	}
 
 	default void renderTiles(PoseStack matrices, SubmitNodeCollector submitter, int light) {
+		renderTiles(matrices, (OrderedSubmitNodeCollector) submitter, light);
+	}
+
+	default void renderTiles(PoseStack matrices, OrderedSubmitNodeCollector submitter, int light) {
 		int mapStartChunkX = MathUtil.roundToBase(screenXToWorldX(bookX()) >> 4, tileChunks()) - 2 * tileChunks();
 		int mapStartChunkZ = MathUtil.roundToBase(screenYToWorldZ(bookY()) >> 4, tileChunks()) - 2 * tileChunks();
 		int mapEndChunkX = MathUtil.roundToBase(screenXToWorldX(bookX() + bookWidth()) >> 4, tileChunks()) + 2 * tileChunks();

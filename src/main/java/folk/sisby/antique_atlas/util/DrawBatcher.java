@@ -12,6 +12,7 @@ import org.joml.Matrix4f;
 import java.util.ArrayList;
 import java.util.List;
 import java.lang.reflect.Method;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -22,7 +23,7 @@ public class DrawBatcher implements AutoCloseable {
 	protected final Matrix4f matrix4f;
 	protected final BufferBuilder bufferBuilder;
 	protected final VertexConsumer vertexConsumer;
-	protected final SubmitNodeCollector submitter;
+	protected final OrderedSubmitNodeCollector submitter;
 	protected final PoseStack submittedMatrices;
 	protected final RenderType renderType;
 	protected final List<Quad> submittedQuads;
@@ -47,18 +48,26 @@ public class DrawBatcher implements AutoCloseable {
 	}
 
 	public static void drawSingle(PoseStack matrices, SubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
+		drawSingle(matrices, (OrderedSubmitNodeCollector) submitter, texture, textureWidth, textureHeight, light, x, y, z, width, height, u, v, regionWidth, regionHeight, argb, drawingTransparent);
+	}
+
+	public static void drawSingle(PoseStack matrices, OrderedSubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
 		try (DrawBatcher batcher = new DrawBatcher(matrices, submitter, texture, textureWidth, textureHeight, light, drawingTransparent)) {
 			batcher.add(x, y, z, width, height, u, v, regionWidth, regionHeight, argb);
 		}
 	}
 
 	public static void drawSingle(PoseStack matrices, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
-		try (DrawBatcher batcher = new DrawBatcher(matrices, (SubmitNodeCollector) null, texture, textureWidth, textureHeight, light, drawingTransparent)) {
+		try (DrawBatcher batcher = new DrawBatcher(matrices, (OrderedSubmitNodeCollector) null, texture, textureWidth, textureHeight, light, drawingTransparent)) {
 			batcher.add(x, y, z, width, height, u, v, regionWidth, regionHeight, argb);
 		}
 	}
 
 	public DrawBatcher(PoseStack matrices, SubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, boolean drawingTransparent) {
+		this(matrices, (OrderedSubmitNodeCollector) submitter, texture, textureWidth, textureHeight, light, drawingTransparent);
+	}
+
+	public DrawBatcher(PoseStack matrices, OrderedSubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, boolean drawingTransparent) {
 		this.submitter = submitter;
 		this.submitted = submitter != null;
 		if (submitter == null) {

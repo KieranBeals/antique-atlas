@@ -4,12 +4,20 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import folk.sisby.antique_atlas.AntiqueAtlas;
 import folk.sisby.antique_atlas.WorldAtlasData;
+import folk.sisby.antique_atlas.util.ColorUtil;
 import folk.sisby.antique_atlas.util.DrawBatcher;
+import folk.sisby.antique_atlas.util.DrawUtil;
 import folk.sisby.antique_atlas.util.MathUtil;
 import folk.sisby.surveyor.client.SurveyorClient;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
@@ -17,6 +25,14 @@ import net.minecraft.world.level.Level;
 import org.joml.Vector2d;
 
 public record HandheldAtlasRenderer(int bookX, int bookY, int bookWidth, int bookHeight, int mapWidth, int mapHeight, int tilePixels, int tileChunks, double guiScale, double mapOffsetX, double mapOffsetY, int mapScale, Player player, WorldAtlasData worldAtlasData, ResourceKey<Level> dim) implements AtlasRenderer {
+	private static final int BOOK_ORDER = -30;
+	private static final int MAP_BACKGROUND_ORDER = -20;
+	private static final int TILES_ORDER = -10;
+	private static final int OVERLAY_ORDER = 0;
+	private static final int MARKERS_ORDER = 10;
+	private static final int FRAME_ORDER = 20;
+	private static final int PLAYERS_ORDER = 30;
+
 	public static HandheldAtlasRenderer fromContext(Player player) {
 		return new HandheldAtlasRenderer(
 			0,
@@ -45,23 +61,58 @@ public record HandheldAtlasRenderer(int bookX, int bookY, int bookWidth, int boo
 		matrices.translate(-1.2D, -0.88D, 0D);
 		matrices.scale(1.0F / 128.0F, 1.0F / 128.0F, 1.0F / 128.0F);
 
-		DrawBatcher.drawSingle(matrices, submitter, AtlasScreen.BOOK, bookWidth, bookHeight, light, bookX, bookY, 0.01F, bookWidth, bookHeight, 0, 0, bookWidth, bookHeight, 0xFFFFFFFF, false);
+		DrawBatcher.drawSingle(matrices, submitter.order(BOOK_ORDER), AtlasScreen.BOOK, bookWidth, bookHeight, light, bookX, bookY, 0.01F, bookWidth, bookHeight, 0, 0, bookWidth, bookHeight, 0xFFFFFFFF, false);
 
 		if (!(Minecraft.getInstance().screen instanceof AtlasScreen)) {
-			renderTiles(matrices, submitter, light);
+			int mapX = bookX + MAP_BORDER_WIDTH;
+			int mapY = bookY + MAP_BORDER_HEIGHT;
+			DrawUtil.fill(matrices, submitter.order(MAP_BACKGROUND_ORDER), RenderTypes.textBackgroundSeeThrough(), 0.0F, light, mapX, mapY, mapX + mapWidth, mapY + mapHeight, 1.0F, ColorUtil.componentsFromRgb(0xE9D39B));
 
-			overlays.keySet().forEach(id -> overlays.get(id).onRender(new AtlasOverlay.AtlasRenderContext(this, matrices, submitter, null, null, light, 1.0F, AntiqueAtlas.getOrderedFriends())));
+			renderTiles(matrices, submitter.order(TILES_ORDER), light);
+
+			SubmitNodeCollector overlaySubmitter = orderedSubmitter(submitter, OVERLAY_ORDER);
+			var friends = AntiqueAtlas.getOrderedFriends();
+			overlays.keySet().forEach(id -> overlays.get(id).onRender(new AtlasOverlay.AtlasRenderContext(this, matrices, overlaySubmitter, null, null, light, 1.0F, friends)));
 
 			Rect2i mapArea = new Rect2i(bookX + MAP_BORDER_WIDTH, bookY + MAP_BORDER_HEIGHT, mapWidth, mapHeight);
+			OrderedSubmitNodeCollector markerSubmitter = submitter.order(MARKERS_ORDER);
 
-			worldAtlasData.getAllMarkers(tileChunks).forEach((landmark, texture) -> renderMarker(matrices, submitter, landmark, texture, -0.02F, light, (x, y) -> (float) Mth.clamp(MathUtil.innerDistanceToEdge(mapArea, new Vector2d(x, y)) / 32.0, 0, 1), false, false, 1));
+			worldAtlasData.getAllMarkers(tileChunks).forEach((landmark, texture) -> renderMarker(matrices, markerSubmitter, landmark, texture, -0.02F, light, (x, y) -> (float) Mth.clamp(MathUtil.innerDistanceToEdge(mapArea, new Vector2d(x, y)) / 32.0, 0, 1), false, false, 1));
 
-			AntiqueAtlas.getOrderedFriends().forEach((uuid, friend) -> renderPlayer(matrices, submitter, -0.04F, light, friend, 1, 1, false, uuid.equals(SurveyorClient.getClientUuid())));
+			DrawBatcher.drawSingle(matrices, submitter.order(FRAME_ORDER), BOOK_FRAME, bookWidth, bookHeight, light, bookX, bookY, -0.03F, bookWidth, bookHeight, 0, 0, bookWidth, bookHeight, 0xFFFFFFFF, true);
 
-			DrawBatcher.drawSingle(matrices, submitter, BOOK_FRAME, bookWidth, bookHeight, light, bookX, bookY, -0.03F, bookWidth, bookHeight, 0, 0, bookWidth, bookHeight, 0xFFFFFFFF, true);
+			OrderedSubmitNodeCollector playerSubmitter = submitter.order(PLAYERS_ORDER);
+			friends.forEach((uuid, friend) -> renderPlayer(matrices, playerSubmitter, -0.04F, light, friend, 1, 1, false, uuid.equals(SurveyorClient.getClientUuid())));
 		}
 
 		matrices.popPose();
+	}
+
+	private static SubmitNodeCollector orderedSubmitter(SubmitNodeCollector submitter, int order) {
+		// AtlasOverlay exposes SubmitNodeCollector; route direct submits into the requested order without changing that API.
+		OrderedSubmitNodeCollector orderedSubmitter = submitter.order(order);
+		InvocationHandler handler = new OrderedSubmitterHandler(submitter, orderedSubmitter);
+		return (SubmitNodeCollector) Proxy.newProxyInstance(SubmitNodeCollector.class.getClassLoader(), new Class<?>[] { SubmitNodeCollector.class }, handler);
+	}
+
+	private record OrderedSubmitterHandler(SubmitNodeCollector rootSubmitter, OrderedSubmitNodeCollector orderedSubmitter) implements InvocationHandler {
+		@Override
+		public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+			if (method.getDeclaringClass() == Object.class) {
+				return switch (method.getName()) {
+					case "equals" -> proxy == args[0];
+					case "hashCode" -> System.identityHashCode(proxy);
+					case "toString" -> "OrderedSubmitter[" + orderedSubmitter + "]";
+					default -> method.invoke(this, args);
+				};
+			}
+			Object target = method.getName().equals("order") && method.getParameterCount() == 1 ? rootSubmitter : orderedSubmitter;
+			try {
+				return method.invoke(target, args);
+			} catch (InvocationTargetException e) {
+				throw e.getTargetException();
+			}
+		}
 	}
 
 	@Override

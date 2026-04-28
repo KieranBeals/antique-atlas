@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.resources.Identifier;
@@ -15,6 +16,10 @@ import org.joml.Matrix4f;
 
 public class DrawUtil {
 	public static void drawCenteredWithRotation(PoseStack matrices, SubmitNodeCollector submitter, Identifier texture, double x, double y, float z, float scale, int textureWidth, int textureHeight, float rotation, int light, int argb) {
+		drawCenteredWithRotation(matrices, (OrderedSubmitNodeCollector) submitter, texture, x, y, z, scale, textureWidth, textureHeight, rotation, light, argb);
+	}
+
+	public static void drawCenteredWithRotation(PoseStack matrices, OrderedSubmitNodeCollector submitter, Identifier texture, double x, double y, float z, float scale, int textureWidth, int textureHeight, float rotation, int light, int argb) {
 		matrices.pushPose();
 		matrices.translate(x, y, 0.0);
 		matrices.scale(scale, scale, 1.0F);
@@ -25,6 +30,10 @@ public class DrawUtil {
 	}
 
 	public static void fill(PoseStack matrices, SubmitNodeCollector submitter, RenderType layer, float z, int light, int x1, int y1, int x2, int y2, float alpha, float[] color) {
+		fill(matrices, (OrderedSubmitNodeCollector) submitter, layer, z, light, x1, y1, x2, y2, alpha, color);
+	}
+
+	public static void fill(PoseStack matrices, OrderedSubmitNodeCollector submitter, RenderType layer, float z, int light, int x1, int y1, int x2, int y2, float alpha, float[] color) {
 		BufferBuilder bufferBuilder = null;
 		VertexConsumer vertexConsumer;
 		if (submitter == null) {

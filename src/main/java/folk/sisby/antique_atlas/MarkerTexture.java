@@ -3,6 +3,7 @@ package folk.sisby.antique_atlas;
 import com.mojang.blaze3d.vertex.PoseStack;
 import folk.sisby.antique_atlas.util.DrawBatcher;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.resources.Identifier;
@@ -95,6 +96,10 @@ public record MarkerTexture(Identifier id, Identifier accentId, Identifier item,
 	}
 
 	public void draw(PoseStack matrices, SubmitNodeCollector submitter, double markerX, double markerY, float z, float markerScale, int tileChunks, float[] accent, float tint, float alpha, int light) {
+		draw(matrices, (OrderedSubmitNodeCollector) submitter, markerX, markerY, z, markerScale, tileChunks, accent, tint, alpha, light);
+	}
+
+	public void draw(PoseStack matrices, OrderedSubmitNodeCollector submitter, double markerX, double markerY, float z, float markerScale, int tileChunks, float[] accent, float tint, float alpha, int light) {
 		if (alpha == 0) return;
 		matrices.pushPose();
 		matrices.translate(markerX, markerY, 0.0);
