@@ -1,32 +1,38 @@
 package folk.sisby.antique_atlas.util;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.render.BufferBuilder;
-import net.minecraft.client.render.BufferRenderer;
-import net.minecraft.client.render.BuiltBuffer;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL11;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.lang.reflect.Method;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.resources.Identifier;
 
 public class DrawBatcher implements AutoCloseable {
 
 	protected final Matrix4f matrix4f;
 	protected final BufferBuilder bufferBuilder;
 	protected final VertexConsumer vertexConsumer;
+	protected final SubmitNodeCollector submitter;
+	protected final PoseStack submittedMatrices;
+	protected final RenderType renderType;
+	protected final List<Quad> submittedQuads;
 	protected final float textureWidth;
 	protected final float textureHeight;
 	protected final int light;
-	protected final boolean inWorld;
+	protected final boolean submitted;
+
+	protected record Quad(float x1, float x2, float y1, float y2, float z, float u1, float u2, float v1, float v2, int argb) {
+	}
 
 	public static boolean areWeShadersRightNow() {
 		try {
@@ -40,34 +46,36 @@ public class DrawBatcher implements AutoCloseable {
 		}
 	}
 
-	public static void drawSingle(MatrixStack matrices, VertexConsumerProvider vertexConsumers, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
-		try (DrawBatcher batcher = new DrawBatcher(matrices, vertexConsumers, texture, textureWidth, textureHeight, light, drawingTransparent)) {
+	public static void drawSingle(PoseStack matrices, SubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
+		try (DrawBatcher batcher = new DrawBatcher(matrices, submitter, texture, textureWidth, textureHeight, light, drawingTransparent)) {
 			batcher.add(x, y, z, width, height, u, v, regionWidth, regionHeight, argb);
 		}
 	}
 
-	public DrawBatcher(MatrixStack matrices, VertexConsumerProvider vertexConsumers, Identifier texture, int textureWidth, int textureHeight, int light, boolean drawingTransparent) {
-		this.inWorld = vertexConsumers != null;
-		if (vertexConsumers == null) {
-			RenderSystem.enableBlend();
-			RenderSystem.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-			RenderSystem.setShaderTexture(0, texture);
-			RenderSystem.setShader(GameRenderer::getPositionColorTexLightmapProgram);
-			this.bufferBuilder = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR_TEXTURE_LIGHT);
-			this.vertexConsumer = bufferBuilder;
-		} else {
-			this.bufferBuilder = null;
-			if (areWeShadersRightNow()) {
-				if (drawingTransparent) {
-					this.vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getEntityNoOutline(texture));
-				} else {
-					this.vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getEntitySolid(texture));
-				}
-			} else {
-				this.vertexConsumer = vertexConsumers.getBuffer(RenderLayer.getText(texture));
-			}
+	public static void drawSingle(PoseStack matrices, Identifier texture, int textureWidth, int textureHeight, int light, int x, int y, float z, int width, int height, int u, int v, int regionWidth, int regionHeight, int argb, boolean drawingTransparent) {
+		try (DrawBatcher batcher = new DrawBatcher(matrices, (SubmitNodeCollector) null, texture, textureWidth, textureHeight, light, drawingTransparent)) {
+			batcher.add(x, y, z, width, height, u, v, regionWidth, regionHeight, argb);
 		}
-		this.matrix4f = matrices.peek().getPositionMatrix();
+	}
+
+	public DrawBatcher(PoseStack matrices, SubmitNodeCollector submitter, Identifier texture, int textureWidth, int textureHeight, int light, boolean drawingTransparent) {
+		this.submitter = submitter;
+		this.submitted = submitter != null;
+		if (submitter == null) {
+			this.renderType = RenderTypes.text(texture);
+			this.bufferBuilder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP);
+			this.vertexConsumer = bufferBuilder;
+			this.submittedMatrices = null;
+			this.submittedQuads = null;
+		} else {
+			this.renderType = areWeShadersRightNow() ? (drawingTransparent ? RenderTypes.entityTranslucent(texture) : RenderTypes.entitySolid(texture)) : RenderTypes.text(texture);
+			this.bufferBuilder = null;
+			this.vertexConsumer = null;
+			this.submittedMatrices = new PoseStack();
+			this.submittedMatrices.last().set(matrices.last());
+			this.submittedQuads = new ArrayList<>();
+		}
+		this.matrix4f = matrices.last().pose();
 		this.textureWidth = textureWidth;
 		this.textureHeight = textureHeight;
 		this.light = light;
@@ -84,25 +92,35 @@ public class DrawBatcher implements AutoCloseable {
 	}
 
 	protected void innerAdd(float x1, float x2, float y1, float y2, float z, float u1, float u2, float v1, float v2, int argb) {
-		if (inWorld) {
-			vertexConsumer.vertex(matrix4f, x1, y1, z).color(argb).texture(u1, v1).overlay(0).light(light).normal(0,0,0);
-			vertexConsumer.vertex(matrix4f, x1, y2, z).color(argb).texture(u1, v2).overlay(0).light(light).normal(0,0,0);
-			vertexConsumer.vertex(matrix4f, x2, y2, z).color(argb).texture(u2, v2).overlay(0).light(light).normal(0,0,0);
-			vertexConsumer.vertex(matrix4f, x2, y1, z).color(argb).texture(u2, v1).overlay(0).light(light).normal(0,0,0);
-		} else {
-			vertexConsumer.vertex(matrix4f, x1, y1, z).color(argb).texture(u1, v1).light(light);
-			vertexConsumer.vertex(matrix4f, x1, y2, z).color(argb).texture(u1, v2).light(light);
-			vertexConsumer.vertex(matrix4f, x2, y2, z).color(argb).texture(u2, v2).light(light);
-			vertexConsumer.vertex(matrix4f, x2, y1, z).color(argb).texture(u2, v1).light(light);
+		if (submitted) {
+			submittedQuads.add(new Quad(x1, x2, y1, y2, z, u1, u2, v1, v2, argb));
+			return;
 		}
+		vertexConsumer.addVertex(matrix4f, x1, y1, z).setColor(argb).setUv(u1, v1).setLight(light);
+		vertexConsumer.addVertex(matrix4f, x1, y2, z).setColor(argb).setUv(u1, v2).setLight(light);
+		vertexConsumer.addVertex(matrix4f, x2, y2, z).setColor(argb).setUv(u2, v2).setLight(light);
+		vertexConsumer.addVertex(matrix4f, x2, y1, z).setColor(argb).setUv(u2, v1).setLight(light);
 	}
 
 	@Override
 	public void close() {
+		if (submitted) {
+			if (!submittedQuads.isEmpty()) {
+				submitter.submitCustomGeometry(submittedMatrices, renderType, (pose, vertexConsumer) -> {
+					Matrix4f matrix = pose.pose();
+					for (Quad quad : submittedQuads) {
+						vertexConsumer.addVertex(matrix, quad.x1, quad.y1, quad.z).setColor(quad.argb).setUv(quad.u1, quad.v1).setLight(light);
+						vertexConsumer.addVertex(matrix, quad.x1, quad.y2, quad.z).setColor(quad.argb).setUv(quad.u1, quad.v2).setLight(light);
+						vertexConsumer.addVertex(matrix, quad.x2, quad.y2, quad.z).setColor(quad.argb).setUv(quad.u2, quad.v2).setLight(light);
+						vertexConsumer.addVertex(matrix, quad.x2, quad.y1, quad.z).setColor(quad.argb).setUv(quad.u2, quad.v1).setLight(light);
+					}
+				});
+			}
+			return;
+		}
 		if (bufferBuilder != null) {
-			BuiltBuffer bb = bufferBuilder.endNullable();
-			if (bb != null) BufferRenderer.drawWithGlobalProgram(bb);
-			RenderSystem.disableBlend();
+			MeshData bb = bufferBuilder.build();
+			if (bb != null) renderType.draw(bb);
 		}
 	}
 }

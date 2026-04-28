@@ -3,13 +3,6 @@ package folk.sisby.antique_atlas;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import folk.sisby.surveyor.WorldSummary;
-import net.minecraft.structure.JigsawJunction;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockBox;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.MathHelper;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -19,6 +12,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.pools.JigsawJunction;
 
 public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatcher, List<TileTexture>> matchers) {
 	public static final BiMap<Identifier, ChunkMatcher> CHUNK_MATCHERS = HashBiMap.create();
@@ -41,18 +40,18 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 		matchers.forEach((matcher, textures) -> {
 			for (ChunkPos pos : matcherFunction.apply(matcher)) {
 				tilePredicates.put(pos, Objects.toString(CHUNK_MATCHERS.inverse().get(matcher), null));
-				int variation = (int) (MathHelper.hashCode(pos.x, pos.z, pos.x * pos.z) & 0x7FFFFFFF);
+				int variation = (int) (Mth.getSeed(pos.x(), pos.z(), pos.x() * pos.z()) & 0x7FFFFFFF);
 				outMap.put(pos, textures.get(variation % textures.size()));
 			}
 		});
 		return outMap;
 	}
 
-	public Map<ChunkPos, TileTexture> getTextures(WorldSummary summary, BlockBox box, Map<ChunkPos, String> tilePredicates) {
+	public Map<ChunkPos, TileTexture> getTextures(WorldSummary summary, BoundingBox box, Map<ChunkPos, String> tilePredicates) {
 		return getTextures(matcher -> matcher.matches(summary, box), tilePredicates);
 	}
 
-	public Map<ChunkPos, TileTexture> getTextures(WorldSummary summary, BlockBox box, List<JigsawJunction> junctions, Map<ChunkPos, String> tilePredicates) {
+	public Map<ChunkPos, TileTexture> getTextures(WorldSummary summary, BoundingBox box, List<JigsawJunction> junctions, Map<ChunkPos, String> tilePredicates) {
 		return getTextures(matcher -> matcher.matches(summary, box, junctions), tilePredicates);
 	}
 
@@ -63,39 +62,39 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 	}
 
 	public interface ChunkMatcher {
-		Collection<ChunkPos> matches(WorldSummary summary, BlockBox box);
+		Collection<ChunkPos> matches(WorldSummary summary, BoundingBox box);
 
-		default Collection<ChunkPos> matches(WorldSummary summary, BlockBox box, List<JigsawJunction> junctions) {
+		default Collection<ChunkPos> matches(WorldSummary summary, BoundingBox box, List<JigsawJunction> junctions) {
 			return matches(summary, box);
 		}
 
-		static Collection<ChunkPos> center(WorldSummary summary, BlockBox box) {
-			return Collections.singleton(new ChunkPos(box.getCenter()));
+		static Collection<ChunkPos> center(WorldSummary summary, BoundingBox box) {
+			return Collections.singleton(ChunkPos.containing(box.getCenter()));
 		}
 
-		static Collection<ChunkPos> topAboveGround(WorldSummary summary, BlockBox box) {
-			if (SEA_LEVEL <= box.getMaxY()) {
-				return Collections.singleton(new ChunkPos(box.getCenter()));
+		static Collection<ChunkPos> topAboveGround(WorldSummary summary, BoundingBox box) {
+			if (SEA_LEVEL <= box.maxY()) {
+				return Collections.singleton(ChunkPos.containing(box.getCenter()));
 			}
 
 			return Collections.emptyList();
 		}
 
-		static Collection<ChunkPos> aboveGround(WorldSummary summary, BlockBox box) {
+		static Collection<ChunkPos> aboveGround(WorldSummary summary, BoundingBox box) {
 			BlockPos center = new BlockPos(box.getCenter());
 			if (SEA_LEVEL - 4 <= center.getY()) {
-				return Collections.singleton(new ChunkPos(center));
+				return Collections.singleton(ChunkPos.containing(center));
 			}
 
 			return Collections.emptyList();
 		}
 
-		static Collection<ChunkPos> bridgeHorizontal(WorldSummary summary, BlockBox box) {
+		static Collection<ChunkPos> bridgeHorizontal(WorldSummary summary, BoundingBox box) {
 			HashSet<ChunkPos> matches = new HashSet<>();
 
-			if (box.getBlockCountX() > 16) {
+			if (box.getXSpan() > 16) {
 				int chunkZ = box.getCenter().getZ() >> 4;
-				for (int x = box.getMinX(); x < box.getMaxX(); x += 16) {
+				for (int x = box.minX(); x < box.maxX(); x += 16) {
 					matches.add(new ChunkPos(x >> 4, chunkZ));
 				}
 			}
@@ -103,12 +102,12 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 			return matches;
 		}
 
-		static Collection<ChunkPos> bridgeVertical(WorldSummary summary, BlockBox box) {
+		static Collection<ChunkPos> bridgeVertical(WorldSummary summary, BoundingBox box) {
 			HashSet<ChunkPos> matches = new HashSet<>();
 
-			if (box.getBlockCountZ() > 16) {
+			if (box.getZSpan() > 16) {
 				int chunkX = box.getCenter().getX() >> 4;
-				for (int z = box.getMinZ(); z < box.getMaxZ(); z += 16) {
+				for (int z = box.minZ(); z < box.maxZ(); z += 16) {
 					matches.add(new ChunkPos(chunkX, z >> 4));
 				}
 			}
@@ -116,17 +115,17 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 			return matches;
 		}
 
-		static Collection<ChunkPos> centerIfHorizontal(WorldSummary summary, BlockBox box) {
-			if (box.getBlockCountX() > box.getBlockCountZ()) {
-				return Collections.singleton(new ChunkPos(box.getCenter()));
+		static Collection<ChunkPos> centerIfHorizontal(WorldSummary summary, BoundingBox box) {
+			if (box.getXSpan() > box.getZSpan()) {
+				return Collections.singleton(ChunkPos.containing(box.getCenter()));
 			} else {
 				return Collections.emptySet();
 			}
 		}
 
-		static Collection<ChunkPos> centerIfVertical(WorldSummary summary, BlockBox box) {
-			if (box.getBlockCountZ() > box.getBlockCountX()) {
-				return Collections.singleton(new ChunkPos(box.getCenter()));
+		static Collection<ChunkPos> centerIfVertical(WorldSummary summary, BoundingBox box) {
+			if (box.getZSpan() > box.getXSpan()) {
+				return Collections.singleton(ChunkPos.containing(box.getCenter()));
 			} else {
 				return Collections.emptySet();
 			}
@@ -134,22 +133,22 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 	}
 
 	public interface ChunkJunctionMatcher extends ChunkMatcher {
-		default Collection<ChunkPos> matches(WorldSummary summary, BlockBox box) {
+		default Collection<ChunkPos> matches(WorldSummary summary, BoundingBox box) {
 			return matches(summary, box, List.of());
 		}
 
-		Collection<ChunkPos> matches(WorldSummary summary, BlockBox box, List<JigsawJunction> junctions);
+		Collection<ChunkPos> matches(WorldSummary summary, BoundingBox box, List<JigsawJunction> junctions);
 
-		static Collection<ChunkPos> straightHorizontal(WorldSummary summary, BlockBox box, List<JigsawJunction> junctions) {
+		static Collection<ChunkPos> straightHorizontal(WorldSummary summary, BoundingBox box, List<JigsawJunction> junctions) {
 			if (junctions.size() == 2 && (junctions.get(0).getSourceZ() == junctions.get(1).getSourceZ() || junctions.get(0).getSourceX() != junctions.get(1).getSourceX())) {
-				return List.of(new ChunkPos(box.getCenter()));
+				return List.of(ChunkPos.containing(box.getCenter()));
 			}
 			return List.of();
 		}
 
-		static Collection<ChunkPos> straightVertical(WorldSummary summary, BlockBox box, List<JigsawJunction> junctions) {
+		static Collection<ChunkPos> straightVertical(WorldSummary summary, BoundingBox box, List<JigsawJunction> junctions) {
 			if (junctions.size() == 2 && (junctions.get(0).getSourceX() == junctions.get(1).getSourceX() || junctions.get(0).getSourceZ() != junctions.get(1).getSourceZ())) {
-				return List.of(new ChunkPos(new BlockPos((junctions.get(0).getSourceX() + junctions.get(1).getSourceX()) / 2, 0, (junctions.get(0).getSourceZ() + junctions.get(1).getSourceZ()) / 2)));
+				return List.of(ChunkPos.containing(new BlockPos((junctions.get(0).getSourceX() + junctions.get(1).getSourceX()) / 2, 0, (junctions.get(0).getSourceZ() + junctions.get(1).getSourceZ()) / 2)));
 			}
 			return List.of();
 		}
@@ -167,4 +166,3 @@ public record StructureTileProvider(Identifier id, int priority, Map<ChunkMatche
 		CHUNK_MATCHERS.put(AntiqueAtlas.id("path_straight_vertical"), (ChunkJunctionMatcher) ChunkJunctionMatcher::straightVertical);
 	}
 }
-

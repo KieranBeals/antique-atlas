@@ -1,21 +1,21 @@
 package folk.sisby.antique_atlas;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 
 
 public class AntiqueAtlasKeybindings {
-	public static final KeyBinding ATLAS_KEYMAPPING = new KeyBinding("key.antique_atlas.open", InputUtil.Type.KEYSYM, 77, "key.antique_atlas.category");
+	public static final KeyMapping ATLAS_KEYMAPPING = new KeyMapping("key.antique_atlas.open", InputConstants.Type.KEYSYM, 77, KeyMapping.Category.register(AntiqueAtlas.id("category")));
 
 	public static void init() {
-		KeyBindingHelper.registerKeyBinding(ATLAS_KEYMAPPING);
+		KeyMappingHelper.registerKeyMapping(ATLAS_KEYMAPPING);
 		ClientTickEvents.END_CLIENT_TICK.register(AntiqueAtlasKeybindings::onClientTick);
 	}
 
-	public static void onClientTick(MinecraftClient client) {
-		while (ATLAS_KEYMAPPING.wasPressed()) AntiqueAtlas.openAtlasScreen();
+	public static void onClientTick(Minecraft client) {
+		while (ATLAS_KEYMAPPING.consumeClick()) AntiqueAtlas.openAtlasScreen();
 	}
 }

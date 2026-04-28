@@ -2,19 +2,18 @@ package folk.sisby.antique_atlas.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import folk.sisby.antique_atlas.AntiqueAtlas;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.world.World;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(ItemStack.class)
 public class MixinItemStack {
 	@ModifyReturnValue(method = "use", at = @At("RETURN"))
-	protected TypedActionResult<ItemStack> openAtlasWithItem(TypedActionResult<ItemStack> original, World world, PlayerEntity user, Hand hand) {
-		return world.isClient() && original.getResult() == ActionResult.PASS && AntiqueAtlas.isHandheldAtlas(user.getStackInHand(hand)) && AntiqueAtlas.openAtlasScreen() != null ? TypedActionResult.success(original.getValue()) : original;
+	protected InteractionResult openAtlasWithItem(InteractionResult original, Level world, Player user, InteractionHand hand) {
+		return world.isClientSide() && original == InteractionResult.PASS && AntiqueAtlas.isHandheldAtlas(user.getItemInHand(hand)) && AntiqueAtlas.openAtlasScreen() != null ? InteractionResult.SUCCESS : original;
 	}
 }

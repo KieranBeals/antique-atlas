@@ -15,18 +15,6 @@ import folk.sisby.surveyor.landmark.component.LandmarkComponentMap;
 import folk.sisby.surveyor.landmark.component.LandmarkComponentTypes;
 import folk.sisby.surveyor.util.RegionPos;
 import it.unimi.dsi.fastutil.Pair;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.gen.structure.Structure;
-
 import java.util.BitSet;
 import java.util.Deque;
 import java.util.HashMap;
@@ -38,15 +26,26 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.Consumer;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.structure.Structure;
 
 public class WorldAtlasData {
-	public static final Map<RegistryKey<World>, WorldAtlasData> WORLDS = new HashMap<>();
+	public static final Map<ResourceKey<Level>, WorldAtlasData> WORLDS = new HashMap<>();
 
-	public static WorldAtlasData getOrCreate(RegistryKey<World> dimension) {
+	public static WorldAtlasData getOrCreate(ResourceKey<Level> dimension) {
 		return WORLDS.computeIfAbsent(dimension, k -> new WorldAtlasData());
 	}
 
-	public static boolean isEmpty(RegistryKey<World> dimension) {
+	public static boolean isEmpty(ResourceKey<Level> dimension) {
 		return !WORLDS.containsKey(dimension) || WORLDS.get(dimension).isEmpty();
 	}
 
@@ -80,20 +79,20 @@ public class WorldAtlasData {
 		}
 	}
 
-	public void onStructuresAdded(WorldSummary summary, Multimap<RegistryKey<Structure>, ChunkPos> starts) {
+	public void onStructuresAdded(WorldSummary summary, Multimap<ResourceKey<Structure>, ChunkPos> starts) {
 		starts.forEach((key, pos) -> StructureTileProviders.getInstance().resolve(structureTiles, debugStructures, debugStructurePredicates, structureMarkers, summary, key, pos, summary.structures().get(key, pos), summary.structures().getType(key), summary.structures().getTags(key)));
 	}
 
 	public void tick(WorldSummary summary) {
 		if (!BiomeTileProviders.getInstance().hasFallbacks()) return;
-		DynamicRegistryManager manager = MinecraftClient.getInstance().getNetworkHandler().getRegistryManager();
+		RegistryAccess manager = Minecraft.getInstance().getConnection().registryAccess();
 		for (int i = 0; i < AntiqueAtlas.CONFIG.chunkTickLimit; i++) {
 			ChunkPos pos = terrainDeque.pollFirst();
 			terrainDequeHash.remove(pos);
 			if (pos == null) break;
-			Pair<TerrainTileProvider, TileElevation> tile = summary.dimension() == World.NETHER ? TerrainTiling.terrainToTileNether(summary, pos) : TerrainTiling.terrainToTile(summary, pos);
+			Pair<TerrainTileProvider, TileElevation> tile = summary.dimension() == Level.NETHER ? TerrainTiling.terrainToTileNether(summary, pos) : TerrainTiling.terrainToTile(summary, pos);
 			if (tile != null) {
-				tileScope.extendTo(pos.x, pos.z);
+				tileScope.extendTo(pos.x(), pos.z());
 				biomeTiles.put(pos, tile.left().getTexture(pos, tile.right()));
 				debugBiomes.put(pos, tile.left());
 				debugBiomePredicates.put(pos, tile.right() == null ? null : tile.right().getName());
@@ -149,17 +148,17 @@ public class WorldAtlasData {
 		if (landmark == null) return;
 		if (landmark.id().getPath().startsWith("grave")) {
 			AntiqueAtlasConfig.GraveStyle style = AntiqueAtlas.CONFIG.graveStyle;
-			Text name = landmark.get(LandmarkComponentTypes.NAME);
+			Component name = landmark.get(LandmarkComponentTypes.NAME);
 			if (name == null && style == AntiqueAtlasConfig.GraveStyle.CAUSE) style = AntiqueAtlasConfig.GraveStyle.DIED;
-			MutableText timeText = Text.literal(String.valueOf(1 + (landmark.getOrDefault(LandmarkComponentTypes.TIME, 0L) / 24000L))).formatted(Formatting.WHITE);
+			MutableComponent timeText = Component.literal(String.valueOf(1 + (landmark.getOrDefault(LandmarkComponentTypes.TIME, 0L) / 24000L))).withStyle(ChatFormatting.WHITE);
 			String key = "gui.antique_atlas.marker.death.%s".formatted(style.toString().toLowerCase());
-			MutableText text = switch (style) {
-				case CAUSE -> Text.translatable(key, name.copy().formatted(Formatting.GRAY).formatted(Formatting.RED), timeText).formatted(Formatting.GRAY);
-				case GRAVE, ITEMS, DIED -> Text.translatable(key, Text.translatable("gui.antique_atlas.marker.death.%s.verb".formatted(style.toString().toLowerCase())).formatted(Formatting.RED), timeText).formatted(Formatting.GRAY);
-				case EUPHEMISMS -> Text.translatable(key, Text.translatable("gui.antique_atlas.marker.death.%s.verb.%s".formatted(style.toString().toLowerCase(), new Random(landmark.getOrDefault(LandmarkComponentTypes.SEED, 0)).nextInt(11))).formatted(Formatting.RED), timeText).formatted(Formatting.GRAY);
+			MutableComponent text = switch (style) {
+				case CAUSE -> Component.translatable(key, name.copy().withStyle(ChatFormatting.GRAY).withStyle(ChatFormatting.RED), timeText).withStyle(ChatFormatting.GRAY);
+				case GRAVE, ITEMS, DIED -> Component.translatable(key, Component.translatable("gui.antique_atlas.marker.death.%s.verb".formatted(style.toString().toLowerCase())).withStyle(ChatFormatting.RED), timeText).withStyle(ChatFormatting.GRAY);
+				case EUPHEMISMS -> Component.translatable(key, Component.translatable("gui.antique_atlas.marker.death.%s.verb.%s".formatted(style.toString().toLowerCase(), new Random(landmark.getOrDefault(LandmarkComponentTypes.SEED, 0)).nextInt(11))).withStyle(ChatFormatting.RED), timeText).withStyle(ChatFormatting.GRAY);
 			};
 			addLandmarkMarker(copyLandmarkWith(landmark, landmark.id(), m -> {
-				m.set(LandmarkComponentTypes.COLOR, DyeColor.GRAY.getEntityColor());
+				m.set(LandmarkComponentTypes.COLOR, DyeColor.GRAY.getTextureDiffuseColor());
 				m.set(LandmarkComponentTypes.NAME, text);
 			}), MarkerTextures.getInstance().fromLandmark(landmark, style == AntiqueAtlasConfig.GraveStyle.ITEMS ? "items" : null));
 		} else {
@@ -169,7 +168,7 @@ public class WorldAtlasData {
 
 	public void onLandmarksAdded(WorldSummary summary, Multimap<UUID, Identifier> landmarks) {
 		landmarks.forEach((type, pos) -> this.addLandmark(summary.landmarks().get(type, pos)));
-		if (MinecraftClient.getInstance().currentScreen instanceof AtlasScreen as) as.updateBookmarkerList();
+		if (Minecraft.getInstance().screen instanceof AtlasScreen as) as.updateBookmarkerList();
 	}
 
 	public void onLandmarksRemoved(WorldSummary summary, Multimap<UUID, Identifier> landmarks) {
@@ -179,10 +178,10 @@ public class WorldAtlasData {
 				if (landmarkMarkers.get(type).isEmpty()) landmarkMarkers.remove(type);
 			}
 		});
-		if (MinecraftClient.getInstance().currentScreen instanceof AtlasScreen as) as.updateBookmarkerList();
+		if (Minecraft.getInstance().screen instanceof AtlasScreen as) as.updateBookmarkerList();
 	}
 
-	public boolean deleteLandmark(RegistryKey<World> dimension, Landmark landmark) {
+	public boolean deleteLandmark(ResourceKey<Level> dimension, Landmark landmark) {
 		WorldSummary summary = SurveyorClient.tryGetSummary(dimension);
 		if (summary == null || summary.landmarks() == null || landmark.owner().equals(WorldLandmarks.GLOBAL) || !SurveyorClient.canModify(landmark.owner())) return false;
 		summary.landmarks().remove(landmark.owner(), landmark.id());

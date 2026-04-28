@@ -1,12 +1,13 @@
 package folk.sisby.antique_atlas.gui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import folk.sisby.antique_atlas.AntiqueAtlas;
 import folk.sisby.antique_atlas.gui.core.ToggleButtonComponent;
 import folk.sisby.antique_atlas.util.ColorUtil;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.ARGB;
 import org.jetbrains.annotations.Nullable;
 
 public class BookmarkButton extends ToggleButtonComponent {
@@ -17,7 +18,7 @@ public class BookmarkButton extends ToggleButtonComponent {
 	public static final int WIDTH = 24;
 	public static final int HEIGHT = 18;
 
-	protected Text title;
+	protected Component title;
 	protected Identifier iconTexture;
 	protected final float[] backgroundTint;
 	protected final float[] iconTint;
@@ -27,7 +28,7 @@ public class BookmarkButton extends ToggleButtonComponent {
 	protected final boolean vertical;
 	protected final Identifier backgroundTexture;
 
-	public BookmarkButton(Identifier backgroundTexture, Text title, Identifier iconTexture, @Nullable Integer backgroundTint, @Nullable Integer iconTint, int iconWidth, int iconHeight, boolean backwards, boolean vertical) {
+	public BookmarkButton(Identifier backgroundTexture, Component title, Identifier iconTexture, @Nullable Integer backgroundTint, @Nullable Integer iconTint, int iconWidth, int iconHeight, boolean backwards, boolean vertical) {
 		super(false);
 		this.backgroundTexture = backgroundTexture;
 		this.title = title;
@@ -42,7 +43,7 @@ public class BookmarkButton extends ToggleButtonComponent {
 		setSize(vertical ? HEIGHT : WIDTH, vertical ? WIDTH : HEIGHT);
 	}
 
-	public BookmarkButton(Text title, Identifier iconTexture, @Nullable Integer backgroundTint, @Nullable Integer iconTint, int iconWidth, int iconHeight, boolean backwards, boolean vertical) {
+	public BookmarkButton(Component title, Identifier iconTexture, @Nullable Integer backgroundTint, @Nullable Integer iconTint, int iconWidth, int iconHeight, boolean backwards, boolean vertical) {
 		this(vertical ? (backwards ? TEXTURE_TOP : TEXTURE_BOTTOM) : (backwards ? TEXTURE_LEFT : TEXTURE_RIGHT), title, iconTexture, backgroundTint, iconTint, iconWidth, iconHeight, backwards, vertical);
 	}
 
@@ -50,29 +51,26 @@ public class BookmarkButton extends ToggleButtonComponent {
 		this.iconTexture = iconTexture;
 	}
 
-	public Text getTitle() {
+	public Component getTitle() {
 		return title;
 	}
 
-	public void setTitle(Text title) {
+	public void setTitle(Component title) {
 		this.title = title;
 	}
 
-	public void drawIcon(DrawContext context, int x, int y) {
-		if (iconTint != null) RenderSystem.setShaderColor(iconTint[0], iconTint[1], iconTint[2], 1.0F);
-		context.drawTexture(iconTexture, x, y, 0, 0, iconWidth, iconHeight, iconWidth, iconHeight);
-		RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+	public void drawIcon(GuiGraphicsExtractor context, int x, int y) {
+		int color = iconTint == null ? 0xFFFFFFFF : ARGB.colorFromFloat(1.0F, iconTint[0], iconTint[1], iconTint[2]);
+		context.blit(RenderPipelines.GUI_TEXTURED, iconTexture, x, y, 0, 0, iconWidth, iconHeight, iconWidth, iconHeight, color);
 	}
 
 	@Override
-	public void render(DrawContext context, int mouseX, int mouseY, float partialTick) {
+	public void render(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
 		boolean mouseOver = isMouseOver(mouseX, mouseY);
 		boolean isExtended = mouseOver || isSelected();
 
-		RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-		if (backgroundTint != null) RenderSystem.setShaderColor(backgroundTint[0], backgroundTint[1], backgroundTint[2], 1.0F);
-		context.drawTexture(backgroundTexture, getGuiX(), getGuiY(), !vertical || isExtended ? 0 : HEIGHT, vertical || isExtended ? 0 : HEIGHT, vertical ? HEIGHT : WIDTH, vertical ? WIDTH : HEIGHT, vertical ? HEIGHT * 2 : WIDTH, vertical ? WIDTH : HEIGHT * 2);
-		RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+		int color = backgroundTint == null ? 0xFFFFFFFF : ARGB.colorFromFloat(1.0F, backgroundTint[0], backgroundTint[1], backgroundTint[2]);
+		context.blit(RenderPipelines.GUI_TEXTURED, backgroundTexture, getGuiX(), getGuiY(), !vertical || isExtended ? 0 : HEIGHT, vertical || isExtended ? 0 : HEIGHT, vertical ? HEIGHT : WIDTH, vertical ? WIDTH : HEIGHT, vertical ? HEIGHT * 2 : WIDTH, vertical ? WIDTH : HEIGHT * 2, color);
 
 		if (iconTexture != null) {
 			int iconX = getGuiX() + (!vertical ? (10 - iconWidth / 2 + (isExtended ? (backwards ? 3 : 1) : (backwards ? 4 : 0))) : (9 - iconHeight / 2));
@@ -83,9 +81,9 @@ public class BookmarkButton extends ToggleButtonComponent {
 		renderTooltip(context, mouseX, mouseY, partialTick, mouseOver);
 	}
 
-	public void renderTooltip(DrawContext context, int mouseX, int mouseY, float partialTick, boolean mouseOver) {
+	public void renderTooltip(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick, boolean mouseOver) {
 		if (mouseOver && !title.getString().isEmpty()) {
-			context.drawTooltip(textRenderer, title, mouseX, mouseY);
+			context.setTooltipForNextFrame(font, title, mouseX, mouseY);
 		}
 	}
 }

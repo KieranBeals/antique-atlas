@@ -1,12 +1,13 @@
 package folk.sisby.antique_atlas.gui.core;
 
 import folk.sisby.antique_atlas.AntiqueAtlas;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.sound.PositionedSoundInstance;
-import net.minecraft.client.util.math.Rect2i;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.Rect2i;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
 
 public class ScrollBoxComponent extends Component {
 	public static final Identifier ARROW = AntiqueAtlas.id("textures/gui/arrow.png");
@@ -30,17 +31,17 @@ public class ScrollBoxComponent extends Component {
 		this.addChild(viewport);
 	}
 
-	public void renderArrow(DrawContext context, int mouseX, int mouseY, boolean prev) {
+	public void renderArrow(GuiGraphicsExtractor context, int mouseX, int mouseY, boolean prev) {
 		int x = !vertical ? (prev ? getGuiX() - ARROW_SIZE : getGuiX() + getWidth()) : getGuiX() + (getWidth() - ARROW_SIZE) / 2;
 		int y = vertical ? (prev ? getGuiY() - ARROW_SIZE : getGuiY() + getHeight()) : getGuiY() + (getHeight() - ARROW_SIZE) / 2;
 		boolean hovered = new Rect2i(x, y, ARROW_SIZE, ARROW_SIZE).contains(mouseX, mouseY);
 		int u = (prev ? 0 : ARROW_SIZE);
 		int v = (vertical ? 0 : ARROW_SIZE) + (hovered ? ARROW_SIZE * 2 : 0);
-		context.drawTexture(ARROW, x, y, u, v, ARROW_SIZE, ARROW_SIZE, ARROW_TEXTURE_WIDTH, ARROW_TEXTURE_HEIGHT);
+		context.blit(RenderPipelines.GUI_TEXTURED, ARROW, x, y, u, v, ARROW_SIZE, ARROW_SIZE, ARROW_TEXTURE_WIDTH, ARROW_TEXTURE_HEIGHT);
 	}
 
 	@Override
-	public void render(DrawContext context, int mouseX, int mouseY, float partialTick) {
+	public void render(GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
 		super.render(context, mouseX, mouseY, partialTick);
 		if (scrollPos > 0) renderArrow(context, mouseX, mouseY, true);
 		if (scrollPos < getContentSize() - getViewportSize()) renderArrow(context, mouseX, mouseY, false);
@@ -53,7 +54,7 @@ public class ScrollBoxComponent extends Component {
 		if (hovered) {
 			int numSteps = (int) Math.round((double) getViewportSize() / scrollStep);
 			setScrollPos(scrollPos + numSteps * scrollStep * (prev ? -1 : 1));
-			MinecraftClient.getInstance().getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK.value(), 1.0F));
+			Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.0F));
 			return true;
 		}
 		return false;

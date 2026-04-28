@@ -14,25 +14,23 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.CommonLifecycleEvents;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.item.ModelPredicateProviderRegistry;
-import net.minecraft.client.util.ModelIdentifier;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.LoreComponent;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemGroups;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.resource.ResourceType;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemLore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,8 +48,6 @@ public class AntiqueAtlas implements ClientModInitializer {
 	public static final AntiqueAtlasConfig CONFIG = AntiqueAtlasConfig.createToml(FabricLoader.getInstance().getConfigDir(), "", "antique-atlas", AntiqueAtlasConfig.class);
 	public static final ScreenState<AtlasScreen> lastState = new ScreenState<>();
 
-	public static final ModelIdentifier ATLAS_MODEL = new ModelIdentifier(AntiqueAtlas.id("atlas"), "inventory");
-
 	public static final List<String> ATLAS_NAMES = List.of(
 		"Antique Atlas",
 		"Atlas antiguo",
@@ -60,38 +56,39 @@ public class AntiqueAtlas implements ClientModInitializer {
 	);
 
 	public static Identifier id(String path) {
-		return path.contains(":") ? Identifier.tryParse(path) : Identifier.of(ID, path);
+		return path.contains(":") ? Identifier.tryParse(path) : Identifier.fromNamespaceAndPath(ID, path);
 	}
 
 	public static ItemStack getHandheldAtlas() {
-		ItemStack stack = Items.BOOK.getDefaultStack().copy();
-		stack.set(DataComponentTypes.ITEM_NAME, Text.translatable("item.antique_atlas.atlas"));
-		stack.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-			Text.translatable("item.antique_atlas.atlas.lore").setStyle(Style.EMPTY.withColor(Formatting.GRAY).withItalic(false)),
-			Text.translatable("item.antique_atlas.atlas.hint", Text.translatable("item.antique_atlas.atlas")).setStyle(Style.EMPTY.withColor(Formatting.GRAY).withItalic(false))
+		ItemStack stack = Items.BOOK.getDefaultInstance().copy();
+		stack.set(DataComponents.ITEM_NAME, Component.translatable("item.antique_atlas.atlas"));
+		stack.set(DataComponents.ITEM_MODEL, AntiqueAtlas.id("atlas"));
+		stack.set(DataComponents.LORE, new ItemLore(List.of(
+			Component.translatable("item.antique_atlas.atlas.lore").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY).withItalic(false)),
+			Component.translatable("item.antique_atlas.atlas.hint", Component.translatable("item.antique_atlas.atlas")).setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY).withItalic(false))
 		)));
 		return stack;
 	}
 
 	public static AtlasScreen openAtlasScreen() {
-		if (MinecraftClient.getInstance().currentScreen == null && (!AntiqueAtlas.CONFIG.requireItem || (MinecraftClient.getInstance().player != null && AntiqueAtlas.hasHandheldAtlas(MinecraftClient.getInstance().player)))) {
+		if (Minecraft.getInstance().screen == null && (!AntiqueAtlas.CONFIG.requireItem || (Minecraft.getInstance().player != null && AntiqueAtlas.hasHandheldAtlas(Minecraft.getInstance().player)))) {
 			AtlasScreen screen = new AtlasScreen();
 			screen.init();
 			screen.prepareToOpen();
 			screen.tick();
-			MinecraftClient.getInstance().setScreen(screen);
+			Minecraft.getInstance().setScreen(screen);
 			return screen;
 		}
 		return null;
 	}
 
 	public static boolean isHandheldAtlas(ItemStack stack) {
-		return stack.isOf(Items.BOOK) && ATLAS_NAMES.stream().anyMatch(n -> stack.getName().getString().toLowerCase().contains(n.toLowerCase()));
+		return stack.is(Items.BOOK) && ATLAS_NAMES.stream().anyMatch(n -> stack.getHoverName().getString().toLowerCase().contains(n.toLowerCase()));
 	}
 
-	public static boolean hasHandheldAtlas(PlayerEntity player) {
-		if (isHandheldAtlas(player.getOffHandStack())) return true;
-		for (ItemStack itemStack : player.getInventory().main) {
+	public static boolean hasHandheldAtlas(Player player) {
+		if (isHandheldAtlas(player.getOffhandItem())) return true;
+		for (ItemStack itemStack : player.getInventory().getNonEquipmentItems()) {
 			if (isHandheldAtlas(itemStack)) {
 				return true;
 			}
@@ -110,27 +107,26 @@ public class AntiqueAtlas implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		AntiqueAtlasKeybindings.init();
-		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(TileTextures.getInstance());
-		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(StructureTileProviders.getInstance());
-		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(BiomeTileProviders.getInstance());
-		ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(MarkerTextures.getInstance());
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(TileTextures.getInstance());
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(StructureTileProviders.getInstance());
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(BiomeTileProviders.getInstance());
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(MarkerTextures.getInstance());
 
 		SurveyorClientEvents.Register.terrainUpdated(id("world_data"), (s, k) -> WorldAtlasData.getOrCreate(s.dimension()).onTerrainUpdated(s, k));
 		SurveyorClientEvents.Register.structuresAdded(id("world_data"), (s, k) -> WorldAtlasData.getOrCreate(s.dimension()).onStructuresAdded(s, k));
 		SurveyorClientEvents.Register.landmarksAdded(id("world_data"), (s, k) -> WorldAtlasData.getOrCreate(s.dimension()).onLandmarksAdded(s, k));
 		SurveyorClientEvents.Register.landmarksRemoved(id("world_data"), (s, k) -> WorldAtlasData.getOrCreate(s.dimension()).onLandmarksRemoved(s, k));
-		ClientTickEvents.END_WORLD_TICK.register((w -> SurveyorClient.getSummaries(MinecraftClient.getInstance().getNetworkHandler()).values().forEach(s -> WorldAtlasData.getOrCreate(s.dimension()).tick(s))));
-		CommonLifecycleEvents.TAGS_LOADED.register(((manager, client) -> BiomeTileProviders.getInstance().registerFallbacks(manager.get(RegistryKeys.BIOME))));
+		ClientTickEvents.END_LEVEL_TICK.register((w -> SurveyorClient.getSummaries(Minecraft.getInstance().getConnection()).values().forEach(s -> WorldAtlasData.getOrCreate(s.dimension()).tick(s))));
+		CommonLifecycleEvents.TAGS_LOADED.register(((manager, client) -> BiomeTileProviders.getInstance().registerFallbacks(manager.lookupOrThrow(Registries.BIOME))));
 		ClientPlayConnectionEvents.DISCONNECT.register(((handler, client) -> BiomeTileProviders.getInstance().clearFallbacks()));
 		ClientPlayConnectionEvents.DISCONNECT.register(((handler, client) -> WorldAtlasData.WORLDS.clear()));
 
-		ModelPredicateProviderRegistry.register(Items.BOOK, AntiqueAtlas.id("atlas"), ((stack, world, entity, seed) -> isHandheldAtlas(stack) ? 1.0F : 0.0F));
-		ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(e -> e.addAfter(Items.MAP, getHandheldAtlas()));
+		CreativeModeTabEvents.modifyOutputEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> e.insertAfter(Items.MAP, getHandheldAtlas()));
 
 		WorldSummary.enableTerrain();
 		WorldSummary.enableStructures();
 		WorldSummary.enableLandmarks();
 
-		FabricLoader.getInstance().getModContainer(ID).ifPresent(c -> ResourceManagerHelper.registerBuiltinResourcePack(id("shader_patch"), c, Text.of("Shader Patch"), ResourcePackActivationType.NORMAL));
+		FabricLoader.getInstance().getModContainer(ID).ifPresent(c -> ResourceManagerHelper.registerBuiltinResourcePack(id("shader_patch"), c, Component.nullToEmpty("Shader Patch"), ResourcePackActivationType.NORMAL));
 	}
 }

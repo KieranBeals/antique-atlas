@@ -1,5 +1,6 @@
 {
 	"key.antique_atlas.category": "Antique Atlas",
+	"key.category.antique_atlas.category": "Antique Atlas",
 	"key.antique_atlas.open": "Open Atlas",
 	"gui.antique_atlas.scalebar": "Scale in blocks",
 	"gui.antique_atlas.addMarker": "Add marker",

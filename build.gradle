@@ -20,12 +20,11 @@ dependencies {
 	implementation libs.kaleidoConfig
 
 	minecraft libs.mc
-	mappings variantOf(libs.yarn) { classifier "v2" }
-	modImplementation libs.fl
+	implementation libs.fl
 
-	modImplementation libs.fapi
+	implementation libs.fapi
 
-	modImplementation libs.surveyor
+	implementation libs.surveyor
 }
 
 processResources {
@@ -48,18 +47,17 @@ processResources {
 	]
 	inputs.properties(meta)
 	filesMatching("*.mod.json") { expand(meta) }
-	filesMatching("META-INF/*mods.toml") { expand(meta) }
 }
 
 tasks.withType(JavaCompile).configureEach {
 	it.options.encoding = "UTF-8"
-	it.options.release = 17
+	it.options.release = 25
 }
 
 java {
 	withSourcesJar()
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
@@ -90,7 +88,7 @@ githubRelease {
 	repo = slug
 	tagName = "v${baseVersion}+${tagBranch}"
 	targetCommitish = tagBranch
-	releaseAssets = remapJar
+	releaseAssets = jar
 	releaseName = "v${baseVersion}"
 	allowUploadToExisting = true
 	generateReleaseNotes = true
@@ -101,7 +99,7 @@ modrinth {
 	token = "$System.env.MODRINTH_TOKEN"
 	projectId = modrinthSlug
 	versionNumber = project.version
-	uploadFile = remapJar
+	uploadFile = jar
 	gameVersions = compatibleVersions.split(", ").toList()
 	loaders = compatibleLoaders.split(", ").toList()
 	changelog = !file("CHANGELOG.md").exists() ? "" : rootProject.file("CHANGELOG.md").text + "\n\nChangelog: https://github.com/${user}/${slug}/releases/tag/v${baseVersion}+${tagBranch}"
@@ -117,7 +115,7 @@ tasks.register('curseforge', net.darkhax.curseforgegradle.TaskPublishCurseForge)
 	apiToken = "$System.env.CURSEFORGE_TOKEN"
 	disableVersionDetection()
 	def projectId = "1391589"
-	def mainFile = upload(projectId, remapJar)
+	def mainFile = upload(projectId, jar)
 	compatibleLoaders.split(", ").toList().forEach { mainFile.addModLoader(it) }
 	compatibleVersions.split(", ").toList().forEach { mainFile.addGameVersion(it) }
 	mainFile.addEnvironment("client")

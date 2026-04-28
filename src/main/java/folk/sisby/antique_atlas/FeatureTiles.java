@@ -1,6 +1,6 @@
 package folk.sisby.antique_atlas;
 
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 
 public class FeatureTiles {
 	public static final Identifier BEDROCK_ROOF = AntiqueAtlas.id("feature/bedrock_roof");
